@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # 1. Base de datos 
+  db-master:
+    image: mysql:8.0
+    container_name: db-master
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: inventario_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # 2. Backend
+  backend:
+    build: ./backend
+    container_name: app-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - DB_HOST=db-master
+      - DB_USER=root
+      - DB_PASSWORD=root
+      - DB_NAME=inventario_db
+    depends_on:
+      - db-master
+
+  # 3. Frontend
+  frontend:
+    build: ./frontend
+    container_name: app-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
