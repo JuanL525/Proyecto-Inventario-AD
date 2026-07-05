@@ -306,6 +306,7 @@ db-master (escritura, puerto 3307)
 Modificar el docker-compose.yml  para la integración de los 3 servicios backend y la integración de NGINX
 
 # 2. Backend (3 replicas)
+```
   backend:
     build: ./backend
     container_name: app-backend
@@ -368,11 +369,13 @@ Modificar el docker-compose.yml  para la integración de los 3 servicios backend
       - backend-2
     networks:
       - db-net 
+```
 
 # Creación del archivo NGINX.conf
 
 Se configura el archivo con la directiva weight (balanceo por pesos) pra la justificación de porque un nodo recibe mas tráfico que el otro
 
+```
 events {
     worker_connections 1024;
 }
@@ -397,11 +400,14 @@ http {
         }
     }
 }
+```
 
 # Prueba de redirección del tráfico por parte de  NGINX
 
+```
 for ($i=1; $i -le 10; $i++) { Invoke-RestMethod http://localhost/api/ping | ConvertTo-Json -Compress }
-
+```
+```
 {"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend"}
 {"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend-1"}
 {"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend"}
@@ -412,3 +418,4 @@ for ($i=1; $i -le 10; $i++) { Invoke-RestMethod http://localhost/api/ping | Conv
 {"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend-1"}
 {"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend"}
 {"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend-2"}
+```
