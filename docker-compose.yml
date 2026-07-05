@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. Base de datos 
+  # 1. BDD- Maestro
   db-master:
     image: mysql:8.0
     container_name: db-master
@@ -9,10 +9,49 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: inventario_db
+      #Cambio de puerto del 3306 al 3307 para evitar conflictos con la base de datos local
     ports:
       - "3307:3306"
     volumes:
+      - ./db/master/my-master.cnf:/etc/mysql/conf.d/my-master.cnf
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - master_data:/var/lib/mysql
+    networks:
+      - db-net
+
+  # 1.1 BDD - Esclavo 1
+  db-slave1:
+    image: mysql:8.0
+    container_name: db-slave1
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3308:3306"
+    volumes:
+      - ./db/slave1/my-slave1.cnf:/etc/mysql/conf.d/my-slave1.cnf
+      - slave1_data:/var/lib/mysql
+    depends_on:
+      - db-master
+    networks:
+      - db-net
+
+  # 1.2 BDD - Esclavo 2
+  db-slave2:
+    image: mysql:8.0
+    container_name: db-slave2
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3309:3306"
+    volumes:
+      - ./db/slave2/my-slave2.cnf:/etc/mysql/conf.d/my-slave2.cnf
+      - slave2_data:/var/lib/mysql
+    depends_on:
+      - db-master
+    networks:
+      - db-net
 
   # 2. Backend
   backend:
@@ -25,8 +64,12 @@ services:
       - DB_USER=root
       - DB_PASSWORD=root
       - DB_NAME=inventario_db
+      # Host del esclavo
+      - DB_SLAVE_HOST=db-slave1
     depends_on:
       - db-master
+    networks:
+      - db-net
 
   # 3. Frontend
   frontend:
@@ -36,3 +79,14 @@ services:
       - "5173:5173"
     depends_on:
       - backend
+    networks:
+      - db-net
+
+volumes:
+  master_data:
+  slave1_data:
+  slave2_data:
+
+networks:
+  db-net:
+    driver: bridge
