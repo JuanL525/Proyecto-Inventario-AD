@@ -49,7 +49,7 @@ app.post('/api/componentes', async (req, res) => {
         }
         
         console.error(error);
-        res.status(500).json({ error: 'Error interno del servidor al registrar el componente' });
+        res.status(500).json({ error: error.message });
     }
 });
 
