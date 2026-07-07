@@ -22,7 +22,7 @@ app.get('/api/componentes', async (req, res) => {
         res.json(rows);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Error conectando a la base de datos' });
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -49,7 +49,7 @@ app.post('/api/componentes', async (req, res) => {
         }
         
         console.error(error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Error interno del servidor al registrar el componente' });
     }
 });
 
