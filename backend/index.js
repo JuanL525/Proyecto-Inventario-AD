@@ -21,8 +21,9 @@ app.get('/api/componentes', async (req, res) => {
         const [rows] = await poolSlave.query('SELECT * FROM componentes');
         res.json(rows);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: error.message });
+        console.log("--- ERROR DETALLADO ---");
+        console.error(error); 
+        res.status(500).json({ error: error.message }); // Enviamos el error al front para verlo en consola
     }
 });
 

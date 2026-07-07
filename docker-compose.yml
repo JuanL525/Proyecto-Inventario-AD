@@ -18,6 +18,11 @@ services:
       - master_data:/var/lib/mysql
     networks:
       - db-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   # 1.1 BDD - Esclavo 1
   db-slave1:
@@ -66,7 +71,8 @@ services:
       - DB_SLAVE_HOST=db-slave1
       - HOSTNAME=backend
     depends_on:
-      - db-master
+      db-master:
+        condition: service_healthy
     networks:
       - db-net
 

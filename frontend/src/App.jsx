@@ -21,10 +21,12 @@ function App() {
   const fetchComponentes = async () => {
     try {
       const res = await fetch(`${apiUrl}/componentes`);
+      if (!res.ok) throw new Error('Error en el servidor'); // Lanza error si 500
       const data = await res.json();
-      setComponentes(data);
+      setComponentes(Array.isArray(data) ? data : []); // Asegura que siempre sea array
     } catch (error) {
       console.error('Error al cargar componentes:', error);
+      setComponentes([]); // Si falla, queda vacío en lugar de romper
     }
   };
 
