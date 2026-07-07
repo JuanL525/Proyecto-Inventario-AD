@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const pool = require('./db');
+const { poolMaster, poolSlave } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,7 +18,7 @@ app.get('/api/ping', (req, res) => {
 // Ruta base para que la DBA compruebe la base de datos (consultar disponibilidad)
 app.get('/api/componentes', async (req, res) => {
     try {
-        const [rows] = await pool.query('SELECT * FROM componentes');
+        const [rows] = await poolSlave.query('SELECT * FROM componentes');
         res.json(rows);
     } catch (error) {
         console.error(error);
@@ -37,7 +37,7 @@ app.post('/api/componentes', async (req, res) => {
     }
 
     try {
-        const [result] = await pool.query(
+        const [result] = await poolMaster.query(
             'INSERT INTO componentes (codigo_serie, nombre, categoria, stock, precio) VALUES (?, ?, ?, ?, ?)',
             [codigo_serie, nombre, categoria, stock, precio]
         );
@@ -59,7 +59,7 @@ app.put('/api/componentes/:id/stock', async (req, res) => {
     const { nuevo_stock } = req.body;
 
     try {
-        const [result] = await pool.query(
+        const [result] = await poolMaster.query(
             'UPDATE componentes SET stock = ? WHERE id = ?',
             [nuevo_stock, id]
         );
