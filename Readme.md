@@ -300,3 +300,122 @@ db-master (escritura, puerto 3307)
    ├── db-slave1 (solo lectura, puerto 3308) ✅ replicando
    └── db-slave2 (solo lectura, puerto 3309) ✅ replicando
 ```
+
+# Balanceo de Carga NGINX por pesos.
+
+Modificar el docker-compose.yml  para la integración de los 3 servicios backend y la integración de NGINX
+
+# 2. Backend (3 replicas)
+```
+  backend:
+    build: ./backend
+    container_name: app-backend
+    environment:
+      - DB_HOST=db-master
+      - DB_USER=root
+      - DB_PASSWORD=root
+      - DB_NAME=inventario_db
+      # Host del esclavo
+      - DB_SLAVE_HOST=db-slave1
+      - HOSTNAME=backend
+    depends_on:
+      - db-master
+    networks:
+      - db-net
+
+  backend-1:
+    build: ./backend
+    container_name: app-backend-1
+    environment:
+      - DB_HOST=db-master
+      - DB_USER=root
+      - DB_PASSWORD=root
+      - DB_NAME=inventario_db
+      # Host del esclavo
+      - DB_SLAVE_HOST=db-slave2
+      - HOSTNAME=backend-1
+    depends_on:
+      - db-master
+    networks:
+      - db-net
+
+  backend-2:
+    build: ./backend
+    container_name: app-backend-2
+    environment:
+      - DB_HOST=db-master
+      - DB_USER=root
+      - DB_PASSWORD=root
+      - DB_NAME=inventario_db
+      # Host del esclavo
+      - DB_SLAVE_HOST=db-slave1
+      - HOSTNAME=backend-2
+    depends_on:
+      - db-master
+    networks:
+      - db-net
+
+  # 2.1 Balanceador NGINX (balanceo)
+  nginx:
+    image: nginx:alpine
+    container_name: app-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - backend-1
+      - backend-2
+    networks:
+      - db-net 
+```
+
+# Creación del archivo NGINX.conf
+
+Se configura el archivo con la directiva weight (balanceo por pesos) pra la justificación de porque un nodo recibe mas tráfico que el otro
+
+```
+events {
+    worker_connections 1024;
+}
+
+http {
+    #Definicion de balanceo por pesos
+    upstream backend_pool {
+        server backend:3000 weight=3; # nodo principal, mas recursos asignados (CPU/RAM)
+        server backend-1:3000 weight=2; # nodo secundario capicidad media
+        server backend-2:3000 weight=1; # nodo de respaldo tiene menor capacidad, trafico minimo
+    }
+
+    server {
+        listen 80;
+
+        location /api/ {
+            proxy_pass http://backend_pool/api/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+```
+
+# Prueba de redirección del tráfico por parte de  NGINX
+
+```
+for ($i=1; $i -le 10; $i++) { Invoke-RestMethod http://localhost/api/ping | ConvertTo-Json -Compress }
+```
+```
+{"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend"}
+{"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend-1"}
+{"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend"}
+{"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend-2"}
+{"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend-1"}
+{"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend"}
+{"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend"}
+{"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend-1"}
+{"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend"}
+{"mensaje":"¡Hola desde el Backend de Inventario!","nodo":"backend-2"}
+```
