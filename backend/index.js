@@ -15,6 +15,36 @@ app.get('/api/ping', (req, res) => {
     res.json({ mensaje: '¡Hola desde el Backend de Inventario!', nodo: process.env.HOSTNAME });
 });
 
+// Ruta de prueba para que DevOps verifique NGINX
+app.get('/api/ping', (req, res) => {
+    res.json({ mensaje: '¡Hola desde el Backend de Inventario!', nodo: process.env.HOSTNAME });
+});
+
+// Validación de Login
+app.post('/api/login', async (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
+    }
+
+    try {
+        const [rows] = await poolSlave.query(
+            'SELECT id, username, rol FROM usuarios WHERE username = ? AND password = ?',
+            [username, password]
+        );
+
+        if (rows.length > 0) {
+            res.json({ mensaje: 'Login exitoso', usuario: rows[0] });
+        } else {
+            res.status(401).json({ error: 'Credenciales incorrectas' });
+        }
+    } catch (error) {
+        console.error("Error en login:", error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
 // Ruta base para que la DBA compruebe la base de datos (consultar disponibilidad)
 app.get('/api/componentes', async (req, res) => {
     try {
