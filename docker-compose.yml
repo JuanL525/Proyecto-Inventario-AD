@@ -6,6 +6,7 @@ services:
     image: mysql:8.0
     container_name: db-master
     restart: always
+    command: --server-id=1 --log-bin=mysql-bin --binlog-do-db=inventario_db
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: inventario_db
@@ -29,6 +30,7 @@ services:
     image: mysql:8.0
     container_name: db-slave1
     restart: always
+    command: --server-id=2 --relay-log=relay-bin --read-only=1
     environment:
       MYSQL_ROOT_PASSWORD: root
     ports:
@@ -46,6 +48,7 @@ services:
     image: mysql:8.0
     container_name: db-slave2
     restart: always
+    command: --server-id=3 --relay-log=relay-bin --read-only=1
     environment:
       MYSQL_ROOT_PASSWORD: root
     ports:

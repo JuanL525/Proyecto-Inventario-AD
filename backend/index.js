@@ -5,22 +5,23 @@ const { poolMaster, poolSlave } = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middlewares
 app.use(cors());
 app.use(express.json());
 
-// Ruta de prueba para que DevOps verifique NGINX
+function validarComponente(body) {
+    const { codigo_serie, nombre, descripcion, unidad, categoria, stock, precio } = body;
+    if (!codigo_serie || !nombre || !descripcion || !unidad || !categoria || stock === undefined || precio === undefined) {
+        return 'Todos los campos son obligatorios';
+    }
+    if (Number(stock) < 0) return 'El stock no puede ser negativo';
+    if (Number(precio) < 0) return 'El precio no puede ser negativo';
+    return null;
+}
+
 app.get('/api/ping', (req, res) => {
-    // Si DevOps configura 3 nodos, podrá ver qué nodo respondió
     res.json({ mensaje: '¡Hola desde el Backend de Inventario!', nodo: process.env.HOSTNAME });
 });
 
-// Ruta de prueba para que DevOps verifique NGINX
-app.get('/api/ping', (req, res) => {
-    res.json({ mensaje: '¡Hola desde el Backend de Inventario!', nodo: process.env.HOSTNAME });
-});
-
-// Validación de Login
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
 
@@ -40,54 +41,97 @@ app.post('/api/login', async (req, res) => {
             res.status(401).json({ error: 'Credenciales incorrectas' });
         }
     } catch (error) {
-        console.error("Error en login:", error);
+        console.error('Error en login:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 });
 
-// Ruta base para que la DBA compruebe la base de datos (consultar disponibilidad)
 app.get('/api/componentes', async (req, res) => {
     try {
-        const [rows] = await poolSlave.query('SELECT * FROM componentes');
+        const [rows] = await poolSlave.query('SELECT * FROM componentes ORDER BY id DESC');
         res.json(rows);
     } catch (error) {
-        console.log("--- ERROR DETALLADO ---");
-        console.error(error); 
-        res.status(500).json({ error: error.message }); // Enviamos el error al front para verlo en consola
+        console.error(error);
+        res.status(500).json({ error: error.message });
     }
 });
 
-// Ruta para registrar un nuevo componente (CUMPLIENDO LA RÚBRICA: Validación de duplicados)
 app.post('/api/componentes', async (req, res) => {
-    // Extraemos los datos que nos enviará el Frontend en React
-    const { codigo_serie, nombre, categoria, stock, precio } = req.body;
-
-    // Validación básica para que no envíen campos vacíos
-    if (!codigo_serie || !nombre || !categoria || stock === undefined || !precio) {
-        return res.status(400).json({ error: 'Todos los campos son obligatorios' });
+    const errorValidacion = validarComponente(req.body);
+    if (errorValidacion) {
+        return res.status(400).json({ error: errorValidacion });
     }
+
+    const { codigo_serie, nombre, descripcion, unidad, categoria, stock, precio } = req.body;
 
     try {
         const [result] = await poolMaster.query(
-            'INSERT INTO componentes (codigo_serie, nombre, categoria, stock, precio) VALUES (?, ?, ?, ?, ?)',
-            [codigo_serie, nombre, categoria, stock, precio]
+            'INSERT INTO componentes (codigo_serie, nombre, descripcion, unidad, categoria, stock, precio) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [codigo_serie, nombre, descripcion, unidad, categoria, stock, precio]
         );
         res.status(201).json({ id: result.insertId, mensaje: 'Componente registrado exitosamente' });
-        
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ error: 'El código de serie ya existe. No se permiten componentes duplicados.' });
         }
-        
         console.error(error);
         res.status(500).json({ error: 'Error interno del servidor al registrar el componente' });
     }
 });
 
-// Ruta para actualizar el stock
+app.put('/api/componentes/:id', async (req, res) => {
+    const errorValidacion = validarComponente(req.body);
+    if (errorValidacion) {
+        return res.status(400).json({ error: errorValidacion });
+    }
+
+    const { id } = req.params;
+    const { codigo_serie, nombre, descripcion, unidad, categoria, stock, precio } = req.body;
+
+    try {
+        const [result] = await poolMaster.query(
+            'UPDATE componentes SET codigo_serie = ?, nombre = ?, descripcion = ?, unidad = ?, categoria = ?, stock = ?, precio = ? WHERE id = ?',
+            [codigo_serie, nombre, descripcion, unidad, categoria, stock, precio, id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Componente no encontrado' });
+        }
+
+        res.json({ mensaje: 'Componente actualizado correctamente' });
+    } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({ error: 'El código de serie ya existe en otro componente.' });
+        }
+        console.error(error);
+        res.status(500).json({ error: 'Error al actualizar el componente' });
+    }
+});
+
+app.delete('/api/componentes/:id', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const [result] = await poolMaster.query('DELETE FROM componentes WHERE id = ?', [id]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Componente no encontrado' });
+        }
+
+        res.json({ mensaje: 'Componente eliminado correctamente' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error al eliminar el componente' });
+    }
+});
+
 app.put('/api/componentes/:id/stock', async (req, res) => {
     const { id } = req.params;
     const { nuevo_stock } = req.body;
+
+    if (nuevo_stock === undefined || Number(nuevo_stock) < 0) {
+        return res.status(400).json({ error: 'Stock inválido' });
+    }
 
     try {
         const [result] = await poolMaster.query(
@@ -103,6 +147,59 @@ app.put('/api/componentes/:id/stock', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Error al actualizar el stock' });
+    }
+});
+
+app.post('/api/comprar', async (req, res) => {
+    const { items } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'El carrito está vacío' });
+    }
+
+    const conn = await poolMaster.getConnection();
+
+    try {
+        await conn.beginTransaction();
+
+        for (const item of items) {
+            const cantidad = Number(item.cantidad);
+            const id = Number(item.id);
+
+            if (!id || !cantidad || cantidad < 1) {
+                throw Object.assign(new Error('Cantidad inválida en el carrito'), { status: 400 });
+            }
+
+            const [rows] = await conn.query(
+                'SELECT id, nombre, stock, precio FROM componentes WHERE id = ? FOR UPDATE',
+                [id]
+            );
+
+            if (rows.length === 0) {
+                throw Object.assign(new Error(`Componente #${id} no encontrado`), { status: 404 });
+            }
+
+            if (rows[0].stock < cantidad) {
+                throw Object.assign(
+                    new Error(`Stock insuficiente para "${rows[0].nombre}" (disponible: ${rows[0].stock})`),
+                    { status: 400 }
+                );
+            }
+
+            await conn.query(
+                'UPDATE componentes SET stock = stock - ? WHERE id = ?',
+                [cantidad, id]
+            );
+        }
+
+        await conn.commit();
+        res.json({ mensaje: 'Compra realizada exitosamente' });
+    } catch (error) {
+        await conn.rollback();
+        const status = error.status || 500;
+        res.status(status).json({ error: error.message || 'Error al procesar la compra' });
+    } finally {
+        conn.release();
     }
 });
 
