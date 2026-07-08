@@ -47,8 +47,9 @@ app.post('/api/login', async (req, res) => {
 });
 
 app.get('/api/componentes', async (req, res) => {
+    const pool = req.query.fresh === 'true' ? poolMaster : poolSlave;
     try {
-        const [rows] = await poolSlave.query('SELECT * FROM componentes ORDER BY id DESC');
+        const [rows] = await pool.query('SELECT * FROM componentes ORDER BY id DESC');
         res.json(rows);
     } catch (error) {
         console.error(error);
