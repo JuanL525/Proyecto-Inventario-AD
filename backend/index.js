@@ -63,12 +63,12 @@ app.post('/api/componentes', async (req, res) => {
         return res.status(400).json({ error: errorValidacion });
     }
 
-    const { codigo_serie, nombre, descripcion, unidad, categoria, stock, precio } = req.body;
+    const { codigo_serie, nombre, descripcion, unidad, categoria, stock, precio, imagen_url } = req.body;
 
     try {
         const [result] = await poolMaster.query(
-            'INSERT INTO componentes (codigo_serie, nombre, descripcion, unidad, categoria, stock, precio) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [codigo_serie, nombre, descripcion, unidad, categoria, stock, precio]
+            'INSERT INTO componentes (codigo_serie, nombre, descripcion, unidad, categoria, stock, precio, imagen_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [codigo_serie, nombre, descripcion, unidad, categoria, stock, precio, imagen_url || null]
         );
         res.status(201).json({ id: result.insertId, mensaje: 'Componente registrado exitosamente' });
     } catch (error) {
@@ -87,12 +87,12 @@ app.put('/api/componentes/:id', async (req, res) => {
     }
 
     const { id } = req.params;
-    const { codigo_serie, nombre, descripcion, unidad, categoria, stock, precio } = req.body;
+    const { codigo_serie, nombre, descripcion, unidad, categoria, stock, precio, imagen_url } = req.body;
 
     try {
         const [result] = await poolMaster.query(
-            'UPDATE componentes SET codigo_serie = ?, nombre = ?, descripcion = ?, unidad = ?, categoria = ?, stock = ?, precio = ? WHERE id = ?',
-            [codigo_serie, nombre, descripcion, unidad, categoria, stock, precio, id]
+            'UPDATE componentes SET codigo_serie = ?, nombre = ?, descripcion = ?, unidad = ?, categoria = ?, stock = ?, precio = ?, imagen_url = ? WHERE id = ?',
+            [codigo_serie, nombre, descripcion, unidad, categoria, stock, precio, imagen_url || null, id]
         );
 
         if (result.affectedRows === 0) {

@@ -3,7 +3,7 @@ import './App.css';
 
 const FORM_VACIO = {
   codigo_serie: '', nombre: '', descripcion: '', unidad: 'unidad',
-  categoria: '', stock: 0, precio: 0
+  categoria: '', stock: 0, precio: 0, imagen_url: ''
 };
 
 const TILE_COLORS = ['tile-lavender', 'tile-mint', 'tile-peach', 'tile-sky', 'tile-butter'];
@@ -40,18 +40,35 @@ const IconTrash = () => (
   </svg>
 );
 
-const IconChevron = ({ open }) => (
-  <svg className={`icon chevron${open ? ' open' : ''}`} viewBox="0 0 24 24">
-    <path d="m6 9 6 6 6-6" />
-  </svg>
-);
-
 const IconProduct = () => (
   <svg className="icon icon-big" viewBox="0 0 24 24" strokeWidth="1.5">
     <rect x="3" y="6" width="18" height="12" rx="2" />
     <path d="M7 10h.01M7 14h.01M12 10h6M12 14h4" />
   </svg>
 );
+
+function ProductImagen({ url, alt, className = '', fallbackClass = '' }) {
+  const [error, setError] = useState(false);
+  const tieneImagen = url && !error;
+
+  if (!tieneImagen) {
+    return (
+      <div className={`product-tile-fallback ${fallbackClass}`}>
+        <IconProduct />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={url}
+      alt={alt}
+      className={`product-img ${className}`}
+      onError={() => setError(true)}
+      loading="lazy"
+    />
+  );
+}
 
 function App() {
   const [usuarioActivo, setUsuarioActivo] = useState(() => {
@@ -80,10 +97,13 @@ function App() {
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
-  const [formAbierto, setFormAbierto] = useState(false);
+  const [modalFormAbierto, setModalFormAbierto] = useState(false);
   const [drawerAbierto, setDrawerAbierto] = useState(false);
   const [busqueda, setBusqueda] = useState('');
+  const [busquedaAdmin, setBusquedaAdmin] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas');
+  const [categoriaAdminFiltro, setCategoriaAdminFiltro] = useState('Todas');
+  const [productoDetalle, setProductoDetalle] = useState(null);
 
   const apiUrl = import.meta.env.VITE_API_URL;
 
@@ -106,7 +126,7 @@ function App() {
 
   useEffect(() => {
     if (usuarioActivo) {
-      fetchComponentes();
+      fetchComponentes(usuarioActivo.rol === 'admin');
     }
   }, [usuarioActivo, fetchComponentes]);
 
@@ -116,7 +136,14 @@ function App() {
   const resetForm = () => {
     setForm({ ...FORM_VACIO });
     setEditandoId(null);
-    setFormAbierto(false);
+    setModalFormAbierto(false);
+  };
+
+  const abrirModalNuevo = () => {
+    setForm({ ...FORM_VACIO });
+    setEditandoId(null);
+    setMensaje({ texto: '', tipo: '' });
+    setModalFormAbierto(true);
   };
 
   const handleSubmit = async (e) => {
@@ -155,10 +182,11 @@ function App() {
       unidad: comp.unidad || 'unidad',
       categoria: comp.categoria || '',
       stock: comp.stock ?? 0,
-      precio: comp.precio ?? 0
+      precio: comp.precio ?? 0,
+      imagen_url: comp.imagen_url || ''
     });
     setMensaje({ texto: '', tipo: '' });
-    setFormAbierto(true);
+    setModalFormAbierto(true);
   };
 
   const handleEliminar = async (id) => {
@@ -208,6 +236,7 @@ function App() {
     });
     setMensaje({ texto: `"${comp.nombre}" agregado al carrito`, tipo: 'exito' });
     setDrawerAbierto(true);
+    setProductoDetalle(null);
   };
 
   const actualizarCantidadCarrito = (id, cantidad) => {
@@ -298,7 +327,10 @@ function App() {
     resetForm();
     setDrawerAbierto(false);
     setBusqueda('');
+    setBusquedaAdmin('');
     setCategoriaFiltro('Todas');
+    setCategoriaAdminFiltro('Todas');
+    setProductoDetalle(null);
   };
 
   if (!usuarioActivo) {
@@ -351,18 +383,30 @@ function App() {
   const totalUnidades = componentes.reduce((s, c) => s + (Number(c.stock) || 0), 0);
   const valorInventario = componentes.reduce((s, c) => s + (Number(c.stock) || 0) * Number(c.precio || 0), 0);
   const agotados = componentes.filter((c) => (c.stock ?? 0) <= 0).length;
+  const stockBajo = componentes.filter((c) => {
+    const s = c.stock ?? 0;
+    return s > 0 && s <= 5;
+  }).length;
+  const conImagen = componentes.filter((c) => c.imagen_url).length;
+  const categoriasUnicas = new Set(componentes.map((c) => c.categoria).filter(Boolean)).size;
 
   const categorias = ['Todas', ...new Set(componentes.map((c) => c.categoria).filter(Boolean))];
 
+  const filtrarComponentes = (lista, cat, q) => lista.filter((c) => {
+    const matchCat = cat === 'Todas' || c.categoria === cat;
+    const query = q.toLowerCase();
+    const matchBusqueda = !query || [c.nombre, c.codigo_serie, c.categoria, c.descripcion]
+      .some((v) => String(v || '').toLowerCase().includes(query));
+    return matchCat && matchBusqueda;
+  });
+
   const componentesFiltrados = esFinal
-    ? componentes.filter((c) => {
-        const matchCat = categoriaFiltro === 'Todas' || c.categoria === categoriaFiltro;
-        const q = busqueda.toLowerCase();
-        const matchBusqueda = !q || [c.nombre, c.codigo_serie, c.categoria, c.descripcion]
-          .some((v) => String(v || '').toLowerCase().includes(q));
-        return matchCat && matchBusqueda;
-      })
+    ? filtrarComponentes(componentes, categoriaFiltro, busqueda)
     : componentes;
+
+  const componentesAdminFiltrados = esAdmin
+    ? filtrarComponentes(componentes, categoriaAdminFiltro, busquedaAdmin)
+    : [];
 
   const renderStock = (stock) => {
     const info = getStockInfo(stock);
@@ -424,132 +468,188 @@ function App() {
       )}
 
       {esAdmin && (
-        <div className="main">
-          <div className="page-head anim-fade-up">
-            <p className="eyebrow">Panel de administración</p>
-            <h1>Inventario de <mark>PC Gamer</mark></h1>
-            <p>Gestiona el catálogo replicado en los tres nodos de la aplicación.</p>
+        <div className="main admin-main">
+          <div className="page-head admin-page-head anim-fade-up">
+            <div>
+              <p className="eyebrow">Panel de administración</p>
+              <h1>Inventario de <mark>PC Gamer</mark></h1>
+              <p>Catálogo replicado en maestro + 2 esclavos · gestión en tiempo real.</p>
+            </div>
+            <button type="button" className="btn btn-primary admin-cta" onClick={abrirModalNuevo}>
+              + Nuevo componente
+            </button>
           </div>
 
           {mensaje.texto && <div className={`alerta ${mensaje.tipo}`}>{mensaje.texto}</div>}
 
-          <div className="stat-grid">
+          <div className="stat-grid admin-stat-grid">
             <div className="stat-card anim-fade-up" style={animDelay(0)}>
               <div className="stat-label">Referencias</div>
               <div className="stat-value">{componentes.length}</div>
+              <div className="stat-sub">{categoriasUnicas} categorías</div>
             </div>
             <div className="stat-card green anim-fade-up" style={animDelay(1)}>
               <div className="stat-label">Unidades totales</div>
               <div className="stat-value">{totalUnidades}</div>
+              <div className="stat-sub">En inventario activo</div>
             </div>
             <div className="stat-card red anim-fade-up" style={animDelay(2)}>
               <div className="stat-label">Valor de inventario</div>
               <div className="stat-value">${valorInventario.toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
+              <div className="stat-sub">Precio × stock</div>
             </div>
             <div className="stat-card amber anim-fade-up" style={animDelay(3)}>
-              <div className="stat-label">Agotados</div>
-              <div className="stat-value">{agotados}</div>
+              <div className="stat-label">Stock bajo</div>
+              <div className="stat-value">{stockBajo}</div>
+              <div className="stat-sub">{agotados} agotados</div>
+            </div>
+            <div className="stat-card lavender anim-fade-up" style={animDelay(4)}>
+              <div className="stat-label">Con imagen</div>
+              <div className="stat-value">{conImagen}/{componentes.length}</div>
+              <div className="stat-sub">Catálogo visual</div>
             </div>
           </div>
 
-          <div className="panel anim-fade-up" style={animDelay(4, 0.05)}>
+          <div className="admin-toolbar anim-fade-up" style={animDelay(5, 0.05)}>
+            <div className="admin-search">
+              <IconSearch />
+              <input
+                type="text"
+                placeholder="Buscar por nombre, SKU o categoría..."
+                value={busquedaAdmin}
+                onChange={(e) => setBusquedaAdmin(e.target.value)}
+              />
+            </div>
             <button
               type="button"
-              className="panel-toggle-head"
-              onClick={() => setFormAbierto((v) => !v)}
+              className="btn btn-ghost btn-sm"
+              onClick={() => fetchComponentes(true)}
             >
-              <h2>{editandoId ? '✎ Editar componente' : '+ Registrar nuevo componente'}</h2>
-              <IconChevron open={formAbierto} />
+              Actualizar
             </button>
-            {formAbierto && (
-              <div className="panel-body panel-body-open">
-                <form onSubmit={handleSubmit}>
-                  <div className="form-grid">
-                    <div className="field">
-                      <label>Código de serie</label>
-                      <input type="text" name="codigo_serie" placeholder="Ej: GPU-4070-01" value={form.codigo_serie} onChange={handleChange} required />
+          </div>
+
+          <div className="chip-row anim-fade-up" style={animDelay(6, 0.05)}>
+            {categorias.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                className={`chip${categoriaAdminFiltro === cat ? ' active' : ''}`}
+                onClick={() => setCategoriaAdminFiltro(cat)}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {componentesAdminFiltrados.length > 0 ? (
+            <div className="admin-grid">
+              {componentesAdminFiltrados.map((comp, index) => {
+                const stock = comp.stock ?? 0;
+                const tile = TILE_COLORS[index % TILE_COLORS.length];
+                return (
+                  <article key={comp.id || `admin-${index}`} className="admin-card anim-card-pop" style={animDelay(index)}>
+                    <div className={`admin-card-image ${tile}`}>
+                      <ProductImagen url={comp.imagen_url} alt={comp.nombre} />
+                      {stock <= 0 && <span className="admin-badge out">Agotado</span>}
+                      {stock > 0 && stock <= 5 && <span className="admin-badge warn">Stock bajo</span>}
                     </div>
-                    <div className="field">
-                      <label>Nombre</label>
-                      <input type="text" name="nombre" placeholder="Ej: RTX 4070 Super" value={form.nombre} onChange={handleChange} required />
+                    <div className="admin-card-body">
+                      <div className="admin-card-top">
+                        <span className="sku-tag">{comp.codigo_serie}</span>
+                        <span className="cat-tag">{comp.categoria}</span>
+                      </div>
+                      <h3>{comp.nombre}</h3>
+                      <p className="admin-card-desc">{comp.descripcion}</p>
+                      {renderStock(stock)}
+                      <div className="admin-card-foot">
+                        <span className="price">${Number(comp.precio ?? 0).toFixed(0)} <small>USD</small></span>
+                        <div className="admin-card-actions">
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleEditar(comp)}>Editar</button>
+                          <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => handleEliminar(comp.id)}>
+                            <IconTrash />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="field">
-                      <label>Categoría</label>
-                      <input type="text" name="categoria" placeholder="Ej: Tarjeta gráfica" value={form.categoria} onChange={handleChange} required />
-                    </div>
-                    <div className="field">
-                      <label>Unidad</label>
-                      <input type="text" name="unidad" placeholder="Ej: unidad, kit" value={form.unidad} onChange={handleChange} required />
-                    </div>
-                    <div className="field">
-                      <label>Stock</label>
-                      <input type="number" name="stock" placeholder="0" value={form.stock} onChange={handleChange} required min="0" />
-                    </div>
-                    <div className="field">
-                      <label>Precio ($)</label>
-                      <input type="number" name="precio" placeholder="0.00" value={form.precio} onChange={handleChange} required step="0.01" min="0" />
-                    </div>
-                    <div className="field full-width">
-                      <label>Descripción</label>
-                      <textarea name="descripcion" rows="2" placeholder="Especificaciones técnicas..." value={form.descripcion} onChange={handleChange} required />
-                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="admin-empty anim-fade-up">
+              <IconProduct />
+              <p>No hay componentes que coincidan con la búsqueda.</p>
+              <button type="button" className="btn btn-primary" onClick={abrirModalNuevo}>Registrar primero</button>
+            </div>
+          )}
+
+          {modalFormAbierto && (
+            <>
+              <div className="drawer-backdrop anim-backdrop-in" onClick={resetForm} />
+              <div className="admin-form-modal anim-modal-in">
+                <div className="admin-form-head">
+                  <div>
+                    <p className="eyebrow">{editandoId ? 'Edición' : 'Nuevo producto'}</p>
+                    <h2>{editandoId ? 'Actualizar componente' : 'Registrar componente'}</h2>
                   </div>
-                  <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
-                    {editandoId && (
+                  <button type="button" className="detail-close" onClick={resetForm} aria-label="Cerrar">
+                    <IconClose />
+                  </button>
+                </div>
+                <form onSubmit={handleSubmit} className="admin-form">
+                  <div className="admin-form-preview">
+                    <div className="admin-preview-frame">
+                      <ProductImagen url={form.imagen_url} alt={form.nombre || 'Vista previa'} className="admin-preview-img" />
+                    </div>
+                    <p className="admin-preview-hint">Vista previa del catálogo</p>
+                  </div>
+                  <div className="admin-form-fields">
+                    <div className="form-grid">
+                      <div className="field">
+                        <label>Código de serie</label>
+                        <input type="text" name="codigo_serie" placeholder="Ej: GPU-4070-01" value={form.codigo_serie} onChange={handleChange} required />
+                      </div>
+                      <div className="field">
+                        <label>Nombre</label>
+                        <input type="text" name="nombre" placeholder="Ej: RTX 4070 Super" value={form.nombre} onChange={handleChange} required />
+                      </div>
+                      <div className="field">
+                        <label>Categoría</label>
+                        <input type="text" name="categoria" placeholder="Ej: Tarjeta gráfica" value={form.categoria} onChange={handleChange} required />
+                      </div>
+                      <div className="field">
+                        <label>Unidad</label>
+                        <input type="text" name="unidad" placeholder="Ej: unidad, kit" value={form.unidad} onChange={handleChange} required />
+                      </div>
+                      <div className="field">
+                        <label>Stock</label>
+                        <input type="number" name="stock" placeholder="0" value={form.stock} onChange={handleChange} required min="0" />
+                      </div>
+                      <div className="field">
+                        <label>Precio ($)</label>
+                        <input type="number" name="precio" placeholder="0.00" value={form.precio} onChange={handleChange} required step="0.01" min="0" />
+                      </div>
+                      <div className="field full-width">
+                        <label>URL de imagen</label>
+                        <input type="url" name="imagen_url" placeholder="https://ejemplo.com/imagen.jpg" value={form.imagen_url} onChange={handleChange} />
+                      </div>
+                      <div className="field full-width">
+                        <label>Descripción</label>
+                        <textarea name="descripcion" rows="3" placeholder="Especificaciones técnicas..." value={form.descripcion} onChange={handleChange} required />
+                      </div>
+                    </div>
+                    <div className="admin-form-actions">
                       <button type="button" className="btn btn-ghost" onClick={resetForm}>Cancelar</button>
-                    )}
-                    <button type="submit" className="btn btn-primary">
-                      {editandoId ? 'Actualizar componente' : 'Guardar componente'}
-                    </button>
+                      <button type="submit" className="btn btn-primary">
+                        {editandoId ? 'Guardar cambios' : 'Publicar en catálogo'}
+                      </button>
+                    </div>
                   </div>
                 </form>
               </div>
-            )}
-          </div>
-
-          <div className="panel anim-fade-up" style={animDelay(5, 0.05)}>
-            <div className="panel-body" style={{ borderTop: 'none', paddingTop: 20 }}>
-              <div className="toolbar-row">
-                <p className="eyebrow" style={{ margin: 0 }}>Stock actual</p>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={fetchComponentes}>Actualizar</button>
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Código</th>
-                      <th>Nombre</th>
-                      <th>Categoría</th>
-                      <th>Stock</th>
-                      <th>Precio</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {componentes.length > 0 ? (
-                      componentes.map((comp, index) => (
-                        <tr key={comp.id || `comp-${index}`} className="anim-row-in" style={animDelay(index, 0.04, 0.5)}>
-                          <td><span className="sku-tag">{comp.codigo_serie || 'N/A'}</span></td>
-                          <td>{comp.nombre || 'N/A'}</td>
-                          <td><span className="cat-tag">{comp.categoria || 'N/A'}</span></td>
-                          <td>{renderStock(comp.stock)}</td>
-                          <td className="price-cell">${Number(comp.precio ?? 0).toFixed(0)}</td>
-                          <td className="actions-cell">
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleEditar(comp)}>Editar</button>
-                            <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => handleEliminar(comp.id)}>Eliminar</button>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6} className="empty-state">No hay componentes registrados o cargando...</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       )}
 
@@ -573,13 +673,23 @@ function App() {
                     <div key={comp.id || `comp-${index}`} className="product-card anim-card-pop" style={animDelay(index)}>
                       {stock > 10 && <div className="badge-corner">En stock</div>}
                       {stock > 0 && stock <= 5 && <div className="badge-corner low">¡Pocas unidades!</div>}
-                      <div className={`product-tile ${tile}`}><IconProduct /></div>
+                      <button
+                        type="button"
+                        className={`product-tile product-tile-btn ${tile}`}
+                        onClick={() => setProductoDetalle(comp)}
+                        aria-label={`Ver ${comp.nombre}`}
+                      >
+                        <ProductImagen url={comp.imagen_url} alt={comp.nombre} />
+                      </button>
                       <div className="product-body">
                         <h3>{comp.nombre}</h3>
                         <p className="card-desc">{comp.descripcion || comp.categoria}</p>
                         {renderStock(stock)}
                         <div className="card-foot">
                           <span className="price">${Number(comp.precio ?? 0).toFixed(0)} <small>USD</small></span>
+                          <button type="button" className="btn-ver-detalle" onClick={() => setProductoDetalle(comp)}>
+                            Ver más
+                          </button>
                         </div>
                         <button
                           type="button"
@@ -598,6 +708,43 @@ function App() {
               <div className="empty-state">No hay componentes que coincidan con tu búsqueda.</div>
             )}
           </div>
+
+          {productoDetalle && (
+            <>
+              <div className="drawer-backdrop anim-backdrop-in" onClick={() => setProductoDetalle(null)} />
+              <div className="product-detail-modal anim-modal-in">
+                <button type="button" className="detail-close" onClick={() => setProductoDetalle(null)} aria-label="Cerrar">
+                  <IconClose />
+                </button>
+                <div className="detail-image-wrap">
+                  <ProductImagen url={productoDetalle.imagen_url} alt={productoDetalle.nombre} className="detail-img" />
+                </div>
+                <div className="detail-content">
+                  <span className="sku-tag">{productoDetalle.codigo_serie}</span>
+                  <span className="cat-tag">{productoDetalle.categoria}</span>
+                  <h2>{productoDetalle.nombre}</h2>
+                  <p className="detail-desc">{productoDetalle.descripcion}</p>
+                  <div className="detail-meta">
+                    <span>Unidad: <strong>{productoDetalle.unidad || 'unidad'}</strong></span>
+                    {renderStock(productoDetalle.stock)}
+                  </div>
+                  <div className="detail-foot">
+                    <span className="price detail-price">
+                      ${Number(productoDetalle.precio ?? 0).toFixed(0)} <small>USD</small>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => agregarAlCarrito(productoDetalle)}
+                      disabled={(productoDetalle.stock ?? 0) < 1}
+                    >
+                      {(productoDetalle.stock ?? 0) < 1 ? 'Agotado' : <><IconCart size={16} /> Agregar al carrito</>}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
 
           {carrito.length > 0 && (
             <button type="button" className="cart-fab anim-fab-in" onClick={() => setDrawerAbierto(true)}>

@@ -9,7 +9,8 @@ CREATE TABLE componentes (
     unidad VARCHAR(30) NOT NULL DEFAULT 'unidad',
     categoria VARCHAR(50) NOT NULL,
     stock INT NOT NULL DEFAULT 0,
-    precio DECIMAL(10,2) NOT NULL
+    precio DECIMAL(10,2) NOT NULL,
+    imagen_url VARCHAR(500) DEFAULT NULL
 );
 
 CREATE TABLE usuarios (
