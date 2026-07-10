@@ -28,6 +28,76 @@ function fechaEntregaEstimada(dias = 3) {
   return fecha.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
+function claveHistorial(username) {
+  return `historialCompras_${username}`;
+}
+
+function leerHistorial(username) {
+  if (!username) return [];
+  try {
+    const data = localStorage.getItem(claveHistorial(username));
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+}
+
+function escribirHistorial(username, historial) {
+  if (!username) return;
+  localStorage.setItem(claveHistorial(username), JSON.stringify(historial));
+}
+
+function migrarUltimaOrden(username) {
+  const historial = leerHistorial(username);
+  const viejo = localStorage.getItem('ultimaOrden');
+  if (!viejo) return historial;
+
+  try {
+    const orden = JSON.parse(viejo);
+    const existe = historial.some((o) => o.numero === orden.numero);
+    const actualizado = existe ? historial : [orden, ...historial];
+    escribirHistorial(username, actualizado);
+    localStorage.removeItem('ultimaOrden');
+    return actualizado;
+  } catch {
+    localStorage.removeItem('ultimaOrden');
+    return historial;
+  }
+}
+
+function formatearFechaOrden(iso) {
+  return new Date(iso).toLocaleDateString('es-ES', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+}
+
+function calcularPasoActual(fechaIso) {
+  const dias = (Date.now() - new Date(fechaIso).getTime()) / (1000 * 60 * 60 * 24);
+  if (dias >= 3) return 4;
+  if (dias >= 2) return 3;
+  if (dias >= 0.5) return 2;
+  return 1;
+}
+
+function agruparArticulosComprados(historial) {
+  const mapa = new Map();
+  historial.forEach((orden) => {
+    orden.items.forEach((item) => {
+      const prev = mapa.get(item.id);
+      if (prev) {
+        mapa.set(item.id, {
+          ...prev,
+          cantidadTotal: prev.cantidadTotal + item.cantidad,
+          vecesComprado: prev.vecesComprado + 1
+        });
+      } else {
+        mapa.set(item.id, { ...item, cantidadTotal: item.cantidad, vecesComprado: 1 });
+      }
+    });
+  });
+  return Array.from(mapa.values());
+}
+
 function getStockInfo(stock) {
   const s = Number(stock) || 0;
   if (s <= 0) return { bar: 'low', label: 'low', text: 'Agotado', width: '6%' };
@@ -100,7 +170,8 @@ function App() {
     }
   });
   const [componentes, setComponentes] = useState([]);
-  const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
+  const [toasts, setToasts] = useState([]);
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const [form, setForm] = useState({ ...FORM_VACIO });
   const [editandoId, setEditandoId] = useState(null);
   const [carrito, setCarrito] = useState(() => {
@@ -122,23 +193,46 @@ function App() {
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todas');
   const [categoriaAdminFiltro, setCategoriaAdminFiltro] = useState('Todas');
   const [productoDetalle, setProductoDetalle] = useState(null);
-  const [ordenConfirmada, setOrdenConfirmada] = useState(() => {
-    const guardado = localStorage.getItem('ultimaOrden');
-    if (!guardado) return null;
-    try {
-      return JSON.parse(guardado);
-    } catch {
-      localStorage.removeItem('ultimaOrden');
-      return null;
-    }
-  });
-  const [modalOrdenAbierto, setModalOrdenAbierto] = useState(false);
+  const [historialCompras, setHistorialCompras] = useState([]);
+  const [ordenSeleccionada, setOrdenSeleccionada] = useState(null);
+  const [modalComprasAbierto, setModalComprasAbierto] = useState(false);
+  const [vistaCompras, setVistaCompras] = useState('lista');
 
   const apiUrl = import.meta.env.VITE_API_URL;
+
+  const cerrarToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const mostrarNotificacion = useCallback((texto, tipo = 'exito') => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { id, texto, tipo }]);
+    window.setTimeout(() => cerrarToast(id), 4200);
+  }, [cerrarToast]);
+
+  const cerrarConfirmacion = () => setConfirmDialog(null);
+
+  const pedirConfirmacion = ({ titulo, mensaje, detalle, confirmarTexto = 'Confirmar', tipo = 'danger', onConfirm }) => {
+    setConfirmDialog({ titulo, mensaje, detalle, confirmarTexto, tipo, onConfirm });
+  };
+
+  const confirmarAccion = async () => {
+    if (!confirmDialog?.onConfirm) return;
+    await confirmDialog.onConfirm();
+    cerrarConfirmacion();
+  };
 
   useEffect(() => {
     localStorage.setItem('carrito', JSON.stringify(carrito));
   }, [carrito]);
+
+  useEffect(() => {
+    if (usuarioActivo?.rol === 'final') {
+      setHistorialCompras(migrarUltimaOrden(usuarioActivo.username));
+    } else {
+      setHistorialCompras([]);
+    }
+  }, [usuarioActivo]);
 
   const fetchComponentes = useCallback(async (fresh = false) => {
     try {
@@ -171,13 +265,11 @@ function App() {
   const abrirModalNuevo = () => {
     setForm({ ...FORM_VACIO });
     setEditandoId(null);
-    setMensaje({ texto: '', tipo: '' });
     setModalFormAbierto(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMensaje({ texto: '', tipo: '' });
 
     const url = editandoId ? `${apiUrl}/componentes/${editandoId}` : `${apiUrl}/componentes`;
     const method = editandoId ? 'PUT' : 'POST';
@@ -191,14 +283,14 @@ function App() {
       const data = await res.json();
 
       if (!res.ok) {
-        setMensaje({ texto: data.error || 'Error al guardar', tipo: 'error' });
+        mostrarNotificacion(data.error || 'Error al guardar', 'error');
         return;
       }
-      setMensaje({ texto: data.mensaje, tipo: 'exito' });
+      mostrarNotificacion(data.mensaje, 'exito');
       resetForm();
       fetchComponentes(true);
     } catch {
-      setMensaje({ texto: 'Error de conexión con el servidor', tipo: 'error' });
+      mostrarNotificacion('Error de conexión con el servidor', 'error');
     }
   };
 
@@ -214,33 +306,41 @@ function App() {
       precio: comp.precio ?? 0,
       imagen_url: comp.imagen_url || ''
     });
-    setMensaje({ texto: '', tipo: '' });
     setModalFormAbierto(true);
   };
 
-  const handleEliminar = async (id) => {
-    if (!window.confirm('¿Eliminar este componente?')) return;
-
+  const ejecutarEliminar = async (id) => {
     try {
       const res = await fetch(`${apiUrl}/componentes/${id}`, { method: 'DELETE' });
       const data = await res.json();
 
       if (!res.ok) {
-        setMensaje({ texto: data.error || 'Error al eliminar', tipo: 'error' });
+        mostrarNotificacion(data.error || 'Error al eliminar', 'error');
         return;
       }
-      setMensaje({ texto: data.mensaje, tipo: 'exito' });
+      mostrarNotificacion(data.mensaje, 'exito');
       if (editandoId === id) resetForm();
       setComponentes((prev) => prev.filter((c) => c.id !== id));
       fetchComponentes(true);
     } catch {
-      setMensaje({ texto: 'Error de conexión con el servidor', tipo: 'error' });
+      mostrarNotificacion('Error de conexión con el servidor', 'error');
     }
+  };
+
+  const solicitarEliminar = (comp) => {
+    pedirConfirmacion({
+      titulo: 'Eliminar componente',
+      mensaje: `¿Eliminar "${comp.nombre}"?`,
+      detalle: 'Esta acción no se puede deshacer. El registro se borrará del inventario replicado en los tres nodos.',
+      confirmarTexto: 'Sí, eliminar',
+      tipo: 'danger',
+      onConfirm: () => ejecutarEliminar(comp.id)
+    });
   };
 
   const agregarAlCarrito = (comp) => {
     if ((comp.stock ?? 0) < 1) {
-      setMensaje({ texto: 'Sin stock disponible', tipo: 'error' });
+      mostrarNotificacion('Sin stock disponible', 'error');
       return;
     }
 
@@ -248,7 +348,7 @@ function App() {
       const existente = prev.find((item) => item.id === comp.id);
       if (existente) {
         if (existente.cantidad >= comp.stock) {
-          setMensaje({ texto: 'No hay más stock disponible', tipo: 'error' });
+          mostrarNotificacion('No hay más stock disponible', 'error');
           return prev;
         }
         return prev.map((item) =>
@@ -265,7 +365,7 @@ function App() {
         codigo_serie: comp.codigo_serie || ''
       }];
     });
-    setMensaje({ texto: `"${comp.nombre}" agregado al carrito`, tipo: 'exito' });
+    mostrarNotificacion(`"${comp.nombre}" agregado al carrito`, 'exito');
     setDrawerAbierto(true);
     setProductoDetalle(null);
   };
@@ -297,7 +397,7 @@ function App() {
 
   const handleComprar = async () => {
     if (carrito.length === 0) {
-      setMensaje({ texto: 'El carrito está vacío', tipo: 'error' });
+      mostrarNotificacion('El carrito está vacío', 'error');
       return;
     }
 
@@ -312,7 +412,7 @@ function App() {
       const data = await res.json();
 
       if (!res.ok) {
-        setMensaje({ texto: data.error || 'Error en la compra', tipo: 'error' });
+        mostrarNotificacion(data.error || 'Error en la compra', 'error');
         return;
       }
 
@@ -325,19 +425,21 @@ function App() {
         items: carrito.map((item) => ({ ...item })),
         total,
         unidades,
-        pasoActual: 1
+        usuario: usuarioActivo.username
       };
 
-      setOrdenConfirmada(orden);
-      localStorage.setItem('ultimaOrden', JSON.stringify(orden));
-      setModalOrdenAbierto(true);
+      const nuevoHistorial = [orden, ...historialCompras];
+      setHistorialCompras(nuevoHistorial);
+      escribirHistorial(usuarioActivo.username, nuevoHistorial);
+      setOrdenSeleccionada(orden);
+      setVistaCompras('detalle');
+      setModalComprasAbierto(true);
       setCarrito([]);
       setDrawerAbierto(false);
       setProductoDetalle(null);
-      setMensaje({ texto: '', tipo: '' });
       fetchComponentes(true);
     } catch {
-      setMensaje({ texto: 'Error de conexión con el servidor', tipo: 'error' });
+      mostrarNotificacion('Error de conexión con el servidor', 'error');
     }
   };
 
@@ -372,11 +474,12 @@ function App() {
     setCarrito([]);
     localStorage.removeItem('usuario');
     localStorage.removeItem('carrito');
-    localStorage.removeItem('ultimaOrden');
     resetForm();
     setDrawerAbierto(false);
-    setOrdenConfirmada(null);
-    setModalOrdenAbierto(false);
+    setHistorialCompras([]);
+    setOrdenSeleccionada(null);
+    setModalComprasAbierto(false);
+    setVistaCompras('lista');
     setBusqueda('');
     setBusquedaAdmin('');
     setCategoriaFiltro('Todas');
@@ -384,8 +487,26 @@ function App() {
     setProductoDetalle(null);
   };
 
-  const cerrarOrdenConfirmada = () => {
-    setModalOrdenAbierto(false);
+  const abrirMisCompras = () => {
+    setVistaCompras('lista');
+    setOrdenSeleccionada(null);
+    setModalComprasAbierto(true);
+  };
+
+  const verDetalleOrden = (orden) => {
+    setOrdenSeleccionada(orden);
+    setVistaCompras('detalle');
+  };
+
+  const cerrarMisCompras = () => {
+    setModalComprasAbierto(false);
+    setVistaCompras('lista');
+    setOrdenSeleccionada(null);
+  };
+
+  const volverAListaCompras = () => {
+    setVistaCompras('lista');
+    setOrdenSeleccionada(null);
   };
 
   if (!usuarioActivo) {
@@ -434,6 +555,8 @@ function App() {
 
   const esAdmin = usuarioActivo.rol === 'admin';
   const esFinal = usuarioActivo.rol === 'final';
+  const bibliotecaArticulos = esFinal ? agruparArticulosComprados(historialCompras) : [];
+  const ordenActiva = ordenSeleccionada;
 
   const totalUnidades = componentes.reduce((s, c) => s + (Number(c.stock) || 0), 0);
   const valorInventario = componentes.reduce((s, c) => s + (Number(c.stock) || 0) * Number(c.precio || 0), 0);
@@ -499,9 +622,9 @@ function App() {
               {totalUnidadesCarrito > 0 && <span className="cart-badge">{totalUnidadesCarrito}</span>}
             </button>
           )}
-          {esFinal && ordenConfirmada && (
-            <button type="button" className="btn btn-ghost btn-sm order-pill-btn" onClick={() => setModalOrdenAbierto(true)}>
-              Mi pedido
+          {esFinal && historialCompras.length > 0 && (
+            <button type="button" className="btn btn-ghost btn-sm order-pill-btn" onClick={abrirMisCompras}>
+              Mis compras ({historialCompras.length})
             </button>
           )}
           <button type="button" className="btn btn-ghost btn-sm" style={{ background: '#fff' }} onClick={handleLogout}>
@@ -539,8 +662,6 @@ function App() {
               + Nuevo componente
             </button>
           </div>
-
-          {mensaje.texto && <div className={`alerta ${mensaje.tipo}`}>{mensaje.texto}</div>}
 
           <div className="stat-grid admin-stat-grid">
             <div className="stat-card anim-fade-up" style={animDelay(0)}>
@@ -626,7 +747,7 @@ function App() {
                         <span className="price">${Number(comp.precio ?? 0).toFixed(0)} <small>USD</small></span>
                         <div className="admin-card-actions">
                           <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleEditar(comp)}>Editar</button>
-                          <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => handleEliminar(comp.id)}>
+                          <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => solicitarEliminar(comp)}>
                             <IconTrash />
                           </button>
                         </div>
@@ -722,8 +843,6 @@ function App() {
               <p>Disponibilidad en tiempo real desde los tres nodos replicados.</p>
             </div>
 
-            {mensaje.texto && <div className={`alerta ${mensaje.tipo}`}>{mensaje.texto}</div>}
-
             {componentesFiltrados.length > 0 ? (
               <div className="product-grid">
                 {componentesFiltrados.map((comp, index) => {
@@ -806,89 +925,158 @@ function App() {
             </>
           )}
 
-          {modalOrdenAbierto && ordenConfirmada && (
+          {modalComprasAbierto && (
             <>
-              <div className="drawer-backdrop anim-backdrop-in" onClick={cerrarOrdenConfirmada} />
-              <div className="order-confirm-modal anim-modal-in">
-                <button type="button" className="detail-close" onClick={cerrarOrdenConfirmada} aria-label="Cerrar">
+              <div className="drawer-backdrop anim-backdrop-in" onClick={cerrarMisCompras} />
+              <div className="order-confirm-modal anim-modal-in purchases-modal">
+                <button type="button" className="detail-close" onClick={cerrarMisCompras} aria-label="Cerrar">
                   <IconClose />
                 </button>
 
-                <div className="order-confirm-head">
-                  <div className="order-success-icon">✓</div>
-                  <div>
-                    <p className="eyebrow">Compra confirmada</p>
-                    <h2>¡Tu pedido está en camino!</h2>
-                    <p className="order-sub">
-                      El stock del inventario se actualizó. Tu compra fue registrada y el envío ya comenzó.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="order-meta-row">
-                  <div className="order-meta-card">
-                    <span className="order-meta-label">Nº de pedido</span>
-                    <span className="order-meta-value">{ordenConfirmada.numero}</span>
-                  </div>
-                  <div className="order-meta-card">
-                    <span className="order-meta-label">Entrega estimada</span>
-                    <span className="order-meta-value">{ordenConfirmada.entregaEstimada}</span>
-                  </div>
-                  <div className="order-meta-card">
-                    <span className="order-meta-label">Total pagado</span>
-                    <span className="order-meta-value">${Number(ordenConfirmada.total).toFixed(0)} USD</span>
-                  </div>
-                </div>
-
-                <div className="order-timeline">
-                  <p className="order-section-title">Seguimiento del envío</p>
-                  <div className="timeline-steps">
-                    {PASOS_ENVIO.map((paso, index) => {
-                      const pasoActual = ordenConfirmada.pasoActual ?? 1;
-                      const estado = index < pasoActual ? 'done' : index === pasoActual ? 'active' : 'pending';
-                      const detalle = paso.id === 'entrega'
-                        ? ordenConfirmada.entregaEstimada
-                        : paso.detalle;
-                      return (
-                        <div key={paso.id} className={`timeline-step ${estado}`}>
-                          <div className="timeline-dot" />
-                          <div className="timeline-content">
-                            <span className="timeline-label">{paso.label}</span>
-                            <span className="timeline-detail">{detalle}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="order-items-block">
-                  <p className="order-section-title">Artículos comprados ({ordenConfirmada.unidades})</p>
-                  <div className="order-items-list">
-                    {ordenConfirmada.items.map((item, index) => (
-                      <div key={item.id || `orden-${index}`} className="order-item-row">
-                        <div className="order-item-thumb">
-                          <ProductImagen url={item.imagen_url} alt={item.nombre} />
-                        </div>
-                        <div className="order-item-info">
-                          <span className="sku-tag">{item.codigo_serie || 'SKU'}</span>
-                          <span className="order-item-name">{item.nombre}</span>
-                          <span className="order-item-qty">{item.cantidad} × ${Number(item.precio).toFixed(0)}</span>
-                        </div>
-                        <span className="order-item-sub">${(Number(item.precio) * item.cantidad).toFixed(0)}</span>
+                {vistaCompras === 'lista' ? (
+                  <>
+                    <div className="order-confirm-head">
+                      <div className="order-success-icon library">📦</div>
+                      <div>
+                        <p className="eyebrow">Historial de compras</p>
+                        <h2>Mis pedidos</h2>
+                        <p className="order-sub">
+                          {historialCompras.length} pedido{historialCompras.length !== 1 ? 's' : ''} guardado{historialCompras.length !== 1 ? 's' : ''} en tu cuenta.
+                          El stock se descontó del inventario al confirmar cada compra.
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
 
-                <div className="order-confirm-foot">
-                  <p className="order-foot-note">
-                    Recibirás actualizaciones por correo. Tiempo estimado: <strong>3 días hábiles</strong>.
-                  </p>
-                  <button type="button" className="btn btn-primary btn-block" onClick={cerrarOrdenConfirmada}>
-                    Seguir comprando
-                  </button>
-                </div>
+                    <div className="purchases-list">
+                      {historialCompras.map((orden) => (
+                        <button
+                          key={orden.numero}
+                          type="button"
+                          className="purchase-card"
+                          onClick={() => verDetalleOrden(orden)}
+                        >
+                          <div className="purchase-card-top">
+                            <span className="sku-tag">{orden.numero}</span>
+                            <span className="purchase-date">{formatearFechaOrden(orden.fecha)}</span>
+                          </div>
+                          <div className="purchase-card-body">
+                            <span className="purchase-summary">
+                              {orden.unidades} artículo{orden.unidades !== 1 ? 's' : ''} · ${Number(orden.total).toFixed(0)} USD
+                            </span>
+                            <span className="purchase-preview">
+                              {orden.items.slice(0, 2).map((i) => i.nombre).join(', ')}
+                              {orden.items.length > 2 ? ` +${orden.items.length - 2} más` : ''}
+                            </span>
+                          </div>
+                          <span className="purchase-link">Ver detalle →</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {bibliotecaArticulos.length > 0 && (
+                      <div className="library-block">
+                        <p className="order-section-title">Biblioteca de artículos comprados</p>
+                        <div className="library-grid">
+                          {bibliotecaArticulos.map((item) => (
+                            <div key={item.id} className="library-item">
+                              <div className="library-thumb">
+                                <ProductImagen url={item.imagen_url} alt={item.nombre} />
+                              </div>
+                              <div className="library-info">
+                                <span className="order-item-name">{item.nombre}</span>
+                                <span className="library-meta">
+                                  {item.cantidadTotal} unid. · {item.vecesComprado} pedido{item.vecesComprado !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : ordenActiva && (
+                  <>
+                    <button type="button" className="btn btn-ghost btn-sm purchase-back" onClick={volverAListaCompras}>
+                      ← Volver al historial
+                    </button>
+
+                    <div className="order-confirm-head">
+                      <div className="order-success-icon">✓</div>
+                      <div>
+                        <p className="eyebrow">Pedido {ordenActiva.numero}</p>
+                        <h2>¡Tu pedido está en camino!</h2>
+                        <p className="order-sub">
+                          Compra del {formatearFechaOrden(ordenActiva.fecha)}. El stock del inventario se actualizó al confirmar.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="order-meta-row">
+                      <div className="order-meta-card">
+                        <span className="order-meta-label">Nº de pedido</span>
+                        <span className="order-meta-value">{ordenActiva.numero}</span>
+                      </div>
+                      <div className="order-meta-card">
+                        <span className="order-meta-label">Entrega estimada</span>
+                        <span className="order-meta-value">{ordenActiva.entregaEstimada}</span>
+                      </div>
+                      <div className="order-meta-card">
+                        <span className="order-meta-label">Total pagado</span>
+                        <span className="order-meta-value">${Number(ordenActiva.total).toFixed(0)} USD</span>
+                      </div>
+                    </div>
+
+                    <div className="order-timeline">
+                      <p className="order-section-title">Seguimiento del envío</p>
+                      <div className="timeline-steps">
+                        {PASOS_ENVIO.map((paso, index) => {
+                          const pasoActual = calcularPasoActual(ordenActiva.fecha);
+                          const estado = index < pasoActual ? 'done' : index === pasoActual ? 'active' : 'pending';
+                          const detalle = paso.id === 'entrega'
+                            ? ordenActiva.entregaEstimada
+                            : paso.detalle;
+                          return (
+                            <div key={paso.id} className={`timeline-step ${estado}`}>
+                              <div className="timeline-dot" />
+                              <div className="timeline-content">
+                                <span className="timeline-label">{paso.label}</span>
+                                <span className="timeline-detail">{detalle}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="order-items-block">
+                      <p className="order-section-title">Artículos comprados ({ordenActiva.unidades})</p>
+                      <div className="order-items-list">
+                        {ordenActiva.items.map((item, index) => (
+                          <div key={item.id || `orden-${index}`} className="order-item-row">
+                            <div className="order-item-thumb">
+                              <ProductImagen url={item.imagen_url} alt={item.nombre} />
+                            </div>
+                            <div className="order-item-info">
+                              <span className="sku-tag">{item.codigo_serie || 'SKU'}</span>
+                              <span className="order-item-name">{item.nombre}</span>
+                              <span className="order-item-qty">{item.cantidad} × ${Number(item.precio).toFixed(0)}</span>
+                            </div>
+                            <span className="order-item-sub">${(Number(item.precio) * item.cantidad).toFixed(0)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="order-confirm-foot">
+                      <p className="order-foot-note">
+                        Recibirás actualizaciones por correo. Tiempo estimado: <strong>3 días hábiles</strong>.
+                      </p>
+                      <button type="button" className="btn btn-primary btn-block" onClick={cerrarMisCompras}>
+                        Seguir comprando
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </>
           )}
@@ -945,6 +1133,44 @@ function App() {
             </>
           )}
         </div>
+      )}
+
+      <div className="toast-stack" aria-live="polite">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`toast toast-${toast.tipo} anim-toast-in`}>
+            <span className="toast-icon" aria-hidden="true">{toast.tipo === 'error' ? '✕' : '✓'}</span>
+            <span className="toast-text">{toast.texto}</span>
+            <button type="button" className="toast-close" onClick={() => cerrarToast(toast.id)} aria-label="Cerrar">
+              <IconClose />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {confirmDialog && (
+        <>
+          <div className="drawer-backdrop anim-backdrop-in" onClick={cerrarConfirmacion} />
+          <div className="confirm-modal anim-modal-in" role="dialog" aria-modal="true">
+            <div className={`confirm-icon ${confirmDialog.tipo}`}>
+              {confirmDialog.tipo === 'warning' ? '!' : <IconTrash />}
+            </div>
+            <h3>{confirmDialog.titulo}</h3>
+            <p className="confirm-message">{confirmDialog.mensaje}</p>
+            {confirmDialog.detalle && <p className="confirm-detail">{confirmDialog.detalle}</p>}
+            <div className="confirm-actions">
+              <button type="button" className="btn btn-ghost" onClick={cerrarConfirmacion}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className={`btn ${confirmDialog.tipo === 'danger' ? 'btn-outline-danger' : 'btn-primary'}`}
+                onClick={confirmarAccion}
+              >
+                {confirmDialog.confirmarTexto}
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       <div className="app-footer">
