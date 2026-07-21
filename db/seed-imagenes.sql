@@ -1,6 +1,3 @@
--- Imágenes de catálogo para todos los componentes (ejecutar en db-master)
--- cat db/seed-imagenes.sql | docker exec -i db-master mysql -uroot -proot inventario_db
-
 USE inventario_db;
 
 UPDATE componentes SET imagen_url = 'https://images.unsplash.com/photo-1597872200969-74b53bb08430?w=400&q=80' WHERE codigo_serie = 'CPU-I7-001';

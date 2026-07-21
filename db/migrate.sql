@@ -1,6 +1,3 @@
--- Migración para BD existente. Ejecutar en db-master:
--- Get-Content db/migrate.sql -Raw | docker exec -i db-master mysql -uroot -proot inventario_db
-
 USE inventario_db;
 
 CREATE TABLE IF NOT EXISTS usuarios (

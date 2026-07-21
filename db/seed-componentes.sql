@@ -1,4 +1,3 @@
--- Catálogo de demo (ejecutar en db-master). Usa INSERT IGNORE para no duplicar SKUs.
 USE inventario_db;
 
 INSERT IGNORE INTO componentes (codigo_serie, nombre, descripcion, unidad, categoria, stock, precio) VALUES

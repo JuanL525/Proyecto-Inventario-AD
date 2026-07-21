@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-# =============================================================================
-# VOLTIO — Setup completo para demo / defensa / compañeras de equipo
-#
-# Uso:
-#   bash setup-demo.sh           # Levanta todo y configura replicación + datos
-#   bash setup-demo.sh --fresh   # Borra volúmenes y empieza desde cero
-#   bash setup-demo.sh --skip-build   # Solo up -d (sin reconstruir imágenes)
-#
-# Requisitos: Docker Desktop (o Docker Engine) + Docker Compose v2
-# =============================================================================
 
 set -euo pipefail
 
@@ -37,7 +27,6 @@ log() { echo ""; echo "==> $*"; }
 ok()  { echo "    ✓ $*"; }
 warn(){ echo "    ! $*"; }
 
-# --- Comprobar Docker ---
 if ! command -v docker >/dev/null 2>&1; then
   echo "ERROR: Docker no está instalado o no está en el PATH."
   exit 1
@@ -47,14 +36,12 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
-# --- Frontend .env ---
 if [ ! -f frontend/.env ]; then
   log "Creando frontend/.env desde .env.example"
   cp frontend/.env.example frontend/.env
   ok "frontend/.env creado"
 fi
 
-# --- Levantar contenedores ---
 if [ "$FRESH" = true ]; then
   log "Instalación limpia: deteniendo y borrando volúmenes..."
   docker compose down -v 2>/dev/null || true
@@ -67,7 +54,6 @@ else
   docker compose up -d --build
 fi
 
-# --- Esperar MySQL maestro ---
 log "Esperando que db-master esté listo (máx. 2 min)..."
 for i in $(seq 1 60); do
   if docker exec db-master mysqladmin ping -uroot -proot --silent 2>/dev/null; then
@@ -81,7 +67,6 @@ for i in $(seq 1 60); do
   sleep 2
 done
 
-# --- Usuario de replicación ---
 log "Configurando usuario de replicación (repl_user)..."
 docker exec db-master mysql -uroot -proot -e "
   CREATE USER IF NOT EXISTS 'repl_user'@'%' IDENTIFIED WITH mysql_native_password BY 'repl_pass';
@@ -90,7 +75,6 @@ docker exec db-master mysql -uroot -proot -e "
 " 2>/dev/null
 ok "repl_user listo"
 
-# --- Seed catálogo ---
 COUNT=$(docker exec db-master mysql -uroot -proot inventario_db -N -e "SELECT COUNT(*) FROM componentes;" 2>/dev/null || echo "0")
 if [ "$COUNT" -eq 0 ]; then
   log "Cargando catálogo de demo (14 componentes)..."
@@ -100,16 +84,13 @@ else
   ok "Catálogo ya tiene $COUNT productos (no se sobrescribe)"
 fi
 
-# --- Imágenes ---
 log "Asignando URLs de imagen al catálogo..."
 docker exec -i db-master mysql -uroot -proot < db/seed-imagenes.sql 2>/dev/null || true
 ok "Imágenes actualizadas"
 
-# --- Replicación ---
 log "Sincronizando esclavos y activando replicación..."
 bash db/fix-replication.sh
 
-# --- Verificación rápida ---
 log "Verificando servicios..."
 
 REPL_OK=true
@@ -144,7 +125,6 @@ else
   warn "Frontend aún iniciando. Prueba en unos segundos: http://localhost:5173"
 fi
 
-# --- Resumen ---
 echo ""
 echo "============================================================================="
 echo "  VOLTIO — Listo para demo"
@@ -157,10 +137,10 @@ echo "  Admin:    admin / admin123"
 echo "  Cliente:  cliente / cliente123"
 echo ""
 echo "  Comandos útiles:"
-echo "    docker compose ps              # estado de contenedores"
-echo "    docker compose logs -f nginx # logs del balanceador"
-echo "    bash db/fix-replication.sh   # reparar replicación si falla"
-echo "    bash setup-demo.sh --fresh   # reinicio limpio completo"
+echo "    docker compose ps"
+echo "    docker compose logs -f nginx"
+echo "    bash db/fix-replication.sh"
+echo "    bash setup-demo.sh --fresh"
 echo ""
 if [ "$REPL_OK" = false ]; then
   warn "Revisar replicación antes de la defensa: bash db/fix-replication.sh"

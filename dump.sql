@@ -1,7 +1,3 @@
--- El dump es "copiar todo el contenido actual de una vez" (la base de partida).
--- La replicación es "a partir de ahora, cualquier cambio nuevo se sincroniza automáticamente".
-
-
 -- MySQL dump 10.13  Distrib 8.0.46, for Linux (x86_64)
 --
 -- Host: localhost    Database: inventario_db

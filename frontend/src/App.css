@@ -1,17 +1,14 @@
 :root {
-  /* Marca — azul profesional */
   --primary: #2563EB;
   --primary-dark: #1D4ED8;
   --primary-light: #3B82F6;
   --primary-wash: #EFF6FF;
   --primary-muted: #DBEAFE;
 
-  /* Acento — cian / sky */
   --accent: #38BDF8;
   --accent-dark: #0EA5E9;
   --accent-wash: #E0F2FE;
 
-  /* Estados funcionales */
   --success: #10B981;
   --success-wash: #D1FAE5;
   --warning: #F59E0B;
@@ -20,7 +17,6 @@
   --danger-dark: #DC2626;
   --danger-wash: #FEE2E2;
 
-  /* Neutros con tinte azul (slate) */
   --ink: #0F172A;
   --gray-900: #1E293B;
   --gray-700: #475569;
@@ -30,7 +26,6 @@
   --gray-50: #F8FAFC;
   --white: #ffffff;
 
-  /* Aliases legados → nueva paleta */
   --red: var(--primary);
   --red-dark: var(--primary-dark);
   --red-wash: var(--primary-wash);
@@ -58,7 +53,6 @@
   --dur-slow: 0.55s;
 }
 
-/* ── KEYFRAMES ── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
@@ -140,7 +134,6 @@
   to { background-color: transparent; }
 }
 
-/* ── ANIMATION UTILITIES ── */
 .anim-page-in { animation: fadeIn var(--dur-slow) var(--ease-out) both; }
 .anim-brand-in { animation: slideInLeft 0.7s var(--ease-out) both; }
 .anim-card-in { animation: scaleIn 0.6s var(--ease-spring) 0.15s both; }
@@ -160,14 +153,12 @@
 .anim-toast-in { animation: toastIn 0.32s var(--ease-out) both; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
 
-* { box-sizing: border-box; }
 
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 
@@ -223,7 +214,6 @@ h1, h2, h3 { font-family: var(--display); margin: 0; }
   flex-shrink: 0;
 }
 
-/* LOGIN */
 .login-shell {
   min-height: 100vh;
   display: grid;
@@ -368,7 +358,6 @@ h1, h2, h3 { font-family: var(--display); margin: 0; }
   .login-brand { display: none; }
 }
 
-/* NAVBAR */
 .navbar {
   background: linear-gradient(135deg, #1E3A8A 0%, var(--primary-dark) 45%, var(--primary) 100%);
   padding: 14px 28px;
@@ -506,7 +495,6 @@ h1, h2, h3 { font-family: var(--display); margin: 0; }
 
 .page-head p { color: var(--gray-700); font-size: .94rem; }
 
-/* STATS */
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -548,7 +536,6 @@ h1, h2, h3 { font-family: var(--display); margin: 0; }
   }
 }
 
-/* ADMIN DASHBOARD */
 .admin-main { padding-bottom: 40px; }
 
 .admin-page-head {
@@ -829,7 +816,6 @@ h1, h2, h3 { font-family: var(--display); margin: 0; }
   font-weight: 700;
 }
 
-/* PANELS */
 .panel {
   background: #fff;
   border: 1px solid var(--gray-300);
@@ -879,7 +865,6 @@ h1, h2, h3 { font-family: var(--display); margin: 0; }
   .form-grid .full-width { grid-column: span 1; }
 }
 
-/* TABLE */
 .table-wrap { overflow-x: auto; }
 
 table { width: 100%; border-collapse: collapse; min-width: 760px; }
@@ -933,7 +918,6 @@ tbody tr:hover { background: var(--gray-50); transform: scale(1.005); }
 .price-cell { font-family: var(--display); font-weight: 700; font-size: 1rem; }
 .actions-cell { display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* STOCK */
 .stock-wrap { min-width: 120px; }
 
 .stock-bar {
@@ -959,7 +943,6 @@ tbody tr:hover { background: var(--gray-50); transform: scale(1.005); }
 .stock-label.warn { color: var(--amber); }
 .stock-label.low { color: var(--danger); }
 
-/* CHIPS */
 .chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
 
 .chip {
@@ -979,7 +962,6 @@ tbody tr:hover { background: var(--gray-50); transform: scale(1.005); }
 .chip:hover { border-color: var(--primary); color: var(--primary); transform: translateY(-2px); }
 .chip.active { background: var(--primary); border-color: var(--primary); color: #fff; transform: scale(1.04); }
 
-/* PRODUCT GRID */
 .store-wrap { position: relative; min-height: 400px; }
 
 .product-grid {
@@ -1224,7 +1206,6 @@ tbody tr:hover { background: var(--gray-50); transform: scale(1.005); }
 .btn-cart-add:hover:not(:disabled) { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 6px 16px -4px rgba(37, 99, 235, .4); }
 .btn-cart-add:disabled { background: var(--gray-100); color: var(--gray-500); cursor: not-allowed; }
 
-/* CART */
 .cart-fab {
   position: fixed;
   bottom: 24px;
@@ -1369,7 +1350,6 @@ tbody tr:hover { background: var(--gray-50); transform: scale(1.005); }
 .drawer-total .label { color: var(--gray-700); font-size: .88rem; font-weight: 600; }
 .drawer-total .value { font-family: var(--display); font-size: 1.35rem; font-weight: 800; color: var(--primary); }
 
-/* ALERTAS */
 .alerta {
   padding: 12px 16px;
   border-radius: var(--radius-sm);
@@ -1446,7 +1426,6 @@ tbody tr:hover { background: var(--gray-50); transform: scale(1.005); }
   animation: fadeUp 0.5s var(--ease-out) both;
 }
 
-/* ORDER CONFIRMATION */
 .order-pill-btn {
   background: rgba(255, 255, 255, .92) !important;
   color: var(--primary) !important;
@@ -1848,7 +1827,6 @@ tbody tr:hover { background: var(--gray-50); transform: scale(1.005); }
   .order-confirm-head { flex-direction: column; }
 }
 
-/* TOASTS */
 .toast-stack {
   position: fixed;
   top: 20px;
@@ -1931,7 +1909,6 @@ tbody tr:hover { background: var(--gray-50); transform: scale(1.005); }
   color: var(--ink);
 }
 
-/* CONFIRM MODAL */
 .confirm-modal {
   position: fixed;
   top: 50%;

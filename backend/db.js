@@ -1,7 +1,6 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-// ESCRITURA (POST, PUT, DELETE) Apunta siempre al Maestro
 const poolMaster = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
@@ -13,7 +12,6 @@ const poolMaster = mysql.createPool({
     queueLimit: 0
 });
 
-// LECTURA (GET) Apunta al Esclavo asignado por Docker
 const poolSlave = mysql.createPool({
     host: process.env.DB_SLAVE_HOST || process.env.DB_HOST,
     user: process.env.DB_USER || 'root',

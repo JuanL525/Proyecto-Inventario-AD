@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Resincroniza esclavos con el maestro y reinicia la replicación.
-# Uso: bash db/fix-replication.sh
 
 set -euo pipefail
 
