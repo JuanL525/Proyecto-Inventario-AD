@@ -32,6 +32,12 @@ function claveHistorial(username) {
   return `historialCompras_${username}`;
 }
 
+function etiquetaRol(rol) {
+  if (rol === 'admin') return 'Administrador';
+  if (rol === 'final') return 'Cliente';
+  return 'Usuario';
+}
+
 function leerHistorial(username) {
   if (!username) return [];
   try {
@@ -615,7 +621,7 @@ function App() {
           </div>
         )}
         <div className="nav-user">
-          <span className="role-pill">{usuarioActivo.rol}</span>
+          <span className="role-pill">{etiquetaRol(usuarioActivo.rol)}</span>
           {esFinal && (
             <button type="button" className="cart-btn" onClick={() => setDrawerAbierto(true)} aria-label="Carrito">
               <IconCart />
