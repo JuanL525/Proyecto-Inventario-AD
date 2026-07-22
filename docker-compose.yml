@@ -21,7 +21,8 @@ services:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
+      start_period: 60s
 
   db-slave1:
     image: mysql:8.0
